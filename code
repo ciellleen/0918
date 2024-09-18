@@ -1,0 +1,158 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <math.h>
+
+#define MAX_POINTS 100  
+
+int n = 0;  
+
+// 파일에서 웨이포인트 데이터를 읽어오는 함수
+void read_file(const char* filename, double X[], double Y[], double Angle[])
+{
+    FILE* fp = fopen(filename, "r");
+
+    if (fp == NULL)
+    {
+        printf("File doesn't exist\n");
+        return;
+    }
+
+    printf("Reading data from file: %s\n", filename);
+    printf("Index\tX\t\tY\t\tAngle\n");
+
+    while (fscanf(fp, "%lf %lf %lf", &X[n], &Y[n], &Angle[n]) != EOF && n < MAX_POINTS)
+    {
+        printf("%d\t%.6f\t%.6f\t%.1f\n", n, X[n], Y[n], Angle[n]);
+        n++;
+    }
+
+    fclose(fp);
+}
+
+// 거리 및 상대 좌표 계산 함수
+void calculate_relative_coordinates_and_distances(double X[], double Y[], double X_ref[], double Y_ref[], double Dist[])
+{
+    for (int i = 0; i < n; i++) 
+    {
+        X_ref[i] = X[i] - X[0];
+        Y_ref[i] = Y[i] - Y[0];
+    }
+
+    Dist[0] = 0.0;
+    for (int i = 1; i < n; i++) 
+    {
+        Dist[i] = sqrt((X[i] - X[i - 1]) * (X[i] - X[i - 1]) + (Y[i] - Y[i - 1]) * (Y[i] - Y[i - 1]));
+    }
+}
+
+// 웨이포인트 간의 yaw 각도를 계산하는 함수
+void calculate_yaw_angles(double x[], double y[], double yaw_angle[])
+{
+    for (int i = 0; i < n; i++)
+    {
+        int next = (i + 1) % n;
+        double dx = x[next] - x[i];
+        double dy = y[next] - y[i];
+
+        double angle = atan2(dy, dx) * 180.0 / 3.141592;
+
+        if (angle < 0) angle += 360.0;
+
+        yaw_angle[i] = angle;
+    }
+}
+
+// 웨이포인트 간의 직선 방정식을 구하는 함수
+void calculate_line_equations(double X[], double Y[], double a[], double b[])
+{
+    for (int i = 0; i < n - 1; i++)
+    {
+        // 기울기 계산
+        a[i] = (Y[i + 1] - Y[i]) / (X[i + 1] - X[i]);
+        // 절편 계산
+        b[i] = Y[i] - a[i] * X[i];
+    }
+}
+
+// 직선 방정식 출력 함수
+void print_line_equations(double a[], double b[])
+{
+    for (int i = 0; i < n - 1; i++)
+    {
+        printf("Line equation between waypoint %d and %d: y = %.6fx + %.6f\n", i, i + 1, a[i], b[i]);
+    }
+}
+
+// 웨이포인트 데이터 출력 함수
+void print_waypoints(double X[], double Y[], double Angle[], double X_ref[], double Y_ref[], double Dist[])
+{
+    printf("Index\t\tX\t\tY\tAngle\tX_ref\t\tY_ref\t\tDistance\n");
+    for (int i = 0; i < n; i++) {
+        printf("%d\t%.6f\t%.6f\t%.1f\t%.6f\t%.6f\t%.6f\n", i, X[i], Y[i], Angle[i], X_ref[i], Y_ref[i], Dist[i]);
+    }
+}
+
+// yaw 각도 출력 함수
+void print_yaw_angles(double yaw_angle[])
+{
+    for (int i = 0; i < n; i++)
+        printf("Yaw angle between waypoint %d and %d: %.2f degrees\n", i, (i + 1) % n, yaw_angle[i]);
+}
+
+// 결과 파일 저장 함수
+void save_results_to_file(const char* filename, double X[], double Y[], double Angle[], double X_ref[], double Y_ref[], double Dist[], double yaw_angle[], int ascending)
+{
+    FILE* outputFile = fopen(filename, "a");  // "a" 모드로 파일에 추가
+    if (outputFile == NULL) 
+    {
+        perror("파일을 열 수 없습니다.");
+        return;
+    }
+
+    if (ascending)
+        fprintf(outputFile, "Sorted by distance (ascending):\n");
+    else
+        fprintf(outputFile, "Sorted by distance (descending):\n");
+
+    fprintf(outputFile, "Index\t\tX\t\t\tY\t\tAngle\t\tX_ref\t\tY_ref\t\tDistance\tYaw Angle\n");
+    for (int i = 0; i < n; i++) {
+        fprintf(outputFile, "%d\t%.6f\t%.6f\t%.1f\t%.6f\t%.6f\t%.6f\t%.2f\n", i, X[i], Y[i], Angle[i], X_ref[i], Y_ref[i], Dist[i], yaw_angle[i]);
+    }
+    fprintf(outputFile, "\n");
+    fclose(outputFile);
+}
+
+int main(void)
+{
+    double X[MAX_POINTS] = { 0.0 }, Y[MAX_POINTS] = { 0.0 }, Angle[MAX_POINTS] = { 0.0 };
+    double X_ref[MAX_POINTS] = { 0.0 }, Y_ref[MAX_POINTS] = { 0.0 };
+    double Dist[MAX_POINTS] = { 0.0 };
+    double yaw_angle[MAX_POINTS] = { 0.0 };
+    double a[MAX_POINTS] = { 0.0 }, b[MAX_POINTS] = { 0.0 }; // 직선 방정식 기울기와 절편
+
+    // 파일에서 웨이포인트 데이터 읽기
+    read_file("waypoint.txt", X, Y, Angle);
+
+    // 상대 좌표 및 거리 계산
+    calculate_relative_coordinates_and_distances(X, Y, X_ref, Y_ref, Dist);
+
+    // yaw 각도 계산
+    calculate_yaw_angles(X, Y, yaw_angle);
+
+    // 직선 방정식 계산
+    calculate_line_equations(X, Y, a, b);
+
+    // 원래 데이터 출력
+    printf("\nWaypoint data:\n");
+    print_waypoints(X, Y, Angle, X_ref, Y_ref, Dist);
+
+    // yaw 각도 출력
+    printf("\nYaw angles between waypoints:\n");
+    print_yaw_angles(yaw_angle);
+
+    // 직선 방정식 출력
+    printf("\nLine equations between waypoints:\n");
+    print_line_equations(a, b);
+
+    return 0;
+}
